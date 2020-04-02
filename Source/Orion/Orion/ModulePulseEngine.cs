@@ -423,7 +423,7 @@ namespace Orion
 				//isp calcs for pulse units is NPU propellant mass - a mix of Beryllium Oxide+Tungsten / NPU mass * plasma vel/G
 				// Tungsten plasma vel ~150 km/s, so for 50 kg of propellant and 215 kg total mass, per-NPU Isp is ~3556. if in atmo that becomes 50kg + (1/3 Pi*plateRadius2(6.25)*offset(12.5)*1.2kg/m3 for air*atmdensity
 				//atmo Isp goes up to ~10520s at sea level
-				Isp = (((Math.Ceiling((15295.74f * (((((NPUMass * CollimationFactor) * (yield * 0.2f)) + ((0.3334 * Math.PI * Math.Pow(0.5 * PlateDiameter, 2) * DetonationDist) * 0.012f * atmoDensity))) / NPUMass)) * 100) / 100)));
+				Isp = (((Math.Ceiling((15295.74f * (((((NPUMass * CollimationFactor) * (yield * 0.2f)) + ((0.3334 * Math.PI * Math.Pow(0.5 * PlateDiameter, 2) * DetonationDist) * 0.0012f * atmoDensity))) / NPUMass)) * 100) / 100)));
 				//NPU mass is constant, but reducing the yield reduces the % propellant flashed into plasma before the radiation case ruptures, determining overall mass delivered to the pusherplate
 				// tl;dr: lower yield bombs less efficient, have lower collimation factor
 				if (!Exhaustdamage)
