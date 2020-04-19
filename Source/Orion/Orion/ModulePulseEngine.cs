@@ -1,4 +1,4 @@
-﻿using KSP.UI.Screens;
+using KSP.UI.Screens;
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -53,6 +53,9 @@ namespace Orion
 		public float PulseDelay = 0; //linked to throttle setting for NPU release rate. Should be 0.87-1.0s at 100% throttle
 		public float ImpulseTime = -1;
 
+		public bool hasFired = false;
+		double AnimDelay;
+
 		[KSPField(guiActive = true, guiActiveEditor = false, guiName = "#LOC_SPO_Pulsedelay")]
 		public string timeTillPulse;
 
@@ -60,8 +63,8 @@ namespace Orion
 		public float ThrottlePercent;
 
 		[KSPField(isPersistant = true, guiActive = true, guiActiveEditor = true, guiName = "#LOC_SPO_YieldSelect"),
-		UI_FloatRange(minValue = 0.5f, maxValue = 5f, stepIncrement = 0.5f, scene = UI_Scene.All, affectSymCounterparts = UI_Scene.All)]
-		public float yield = 1.0f; //yield in tonnes of pulse unit
+		UI_FloatRange(minValue = 0.05f, maxValue = 5f, stepIncrement = 0.05f, scene = UI_Scene.All, affectSymCounterparts = UI_Scene.All)]
+		public float yield = 1.0f; //yield in kT of pulse unit
 
 		[KSPField(isPersistant = true, guiActive = true, guiName = "#LOC_SPO_Impulse", guiActiveEditor = false)]
 		public string ImpulseDisplay;
@@ -351,7 +354,7 @@ namespace Orion
 				Actions["AGRetract"].active = false;
 				Actions["AGRetract"].active = false;
 			}
-			if (HighLogic.LoadedSceneIsFlight)
+			if (HighLogic.LoadedSceneIsFlight || HighLogic.LoadedSceneIsEditor)
 			{
 				thrustTransform = part.FindModelTransform(thrustTransformName);
 				if (enginePacked)
@@ -360,10 +363,10 @@ namespace Orion
 					deployState.speed = 0;
 					deployState.normalizedTime = 1;
 				}
-			}
-			else if (HighLogic.LoadedSceneIsEditor)
-			{
-				thrustTransform = part.FindModelTransform(thrustTransformName);
+				else
+				{
+					deployState.normalizedTime = 0;
+				}
 			}
 
 			AnimState = SetAnimation(AnimName, part);
@@ -417,7 +420,7 @@ namespace Orion
 		void CalculateNPUStats()
 		{
 
-				atmoDensity = vessel.atmDensity;
+			atmoDensity = vessel.atmDensity;
 				//see about attaching a copy of whatever the colorchanger module used for the scorching visual effect for heatshields to any parts in line of sight affected by NPU heat to scorch them?
 				//Nah, plasma temp estimated ~124000, mostly UV wavelength. Most stuff is opaque to uV, so little heat transferred to plate (is why there's Be Oxide filler - to convert X-Ray fury of detonation into Uv heat
 				//isp calcs for pulse units is NPU propellant mass - a mix of Beryllium Oxide+Tungsten / NPU mass * plasma vel/G
@@ -433,15 +436,16 @@ namespace Orion
 				else
 				{
 					BlastRadius = Math.Ceiling((((Math.Pow(yield, 0.43) + 0.3) * 1000.0)) * 100) / 100;
-					//Detonation in vac is going to be 95% EMR, with a thin plasmashell of vaporized bomb components moving 10s of km/s. That would be, what, maybe a couple of kN over a spacecraft sized target at <50m range at most?
-					NPUImpulse = Math.Ceiling(((((((Math.Pow((Math.Pow((Math.Pow((9.54 * Math.Pow(10.0, -3.0) * (2200.0 / DetonationDist)), 1.95)), 4.0) + Math.Pow((Math.Pow((3.01 * (1100.0 / DetonationDist)), 1.25)), 4.0)), 0.25)) //
-						* 6.894) // above equation for overpressure falloff originally outputted Psi, so convert to kPa
-						* atmoDensity)// accounting for atmo density
-						* Math.Pow(yield, (1.0 / 3.0))) // scaling for yield
-						* ((Math.PI * Math.Pow(0.5 * PlateDiameter, 2)) / KSPScalar)) //should be by surface area, but that would yield something like 130MN ASL w/ 0.5kT yield. Great if an actual multi-kiloton orion vessel, but in KSP...?
-						+ (9.80665 * NPUMass * Isp)) // impulse from NPU propellant, for vac operation
-						* 100) / 100; //round to 2 decimal places
-				}
+				//Detonation in vac is going to be 95% EMR, with a thin plasmashell of vaporized bomb components moving 10s of km/s. That would be, what, maybe a couple of kN over a spacecraft sized target at <50m range at most?
+				NPUImpulse = Math.Ceiling(((((((Math.Pow((Math.Pow((Math.Pow((9.54 * Math.Pow(10.0, -3.0) * (2200.0 / DetonationDist)), 1.95)), 4.0) + Math.Pow((Math.Pow((3.01 * (2200.0 / DetonationDist)), 1.25)), 4.0)), 0.25)) //something messed up in calc  -should be outputting ~812 @12.5m detonationDist
+					* 6.894) // above equation for overpressure falloff originally outputted Psi, so convert to kPa
+					* atmoDensity)// accounting for atmo density
+					* Math.Pow(yield, (1.0 / 3.0))) // scaling for yield
+					* ((Math.PI * Math.Pow(0.5 * PlateDiameter, 2)) / KSPScalar)) //should be by surface area, but that would yield something like 130MN ASL w/ 0.5kT yield. Great if an actual multi-kiloton orion vessel, but in KSP...?
+					+ (9.80665 * NPUMass * Isp)) // impulse from NPU propellant, for vac operation
+					* 100) / 100; //round to 2 decimal places
+
+			}
 				//Thrust = spc.G*massflow*Isp; 9.80665*.215*3557 = 7499.68kn @ 5kt & 1599.89 kn @ 1 kt
 				//Isp = ((NPUImpulse + (90 * NPUMass)) / (9.80665 * NPUMass));//account for impulse from firing the NPU for total Isp
 			double drymass = (vessel.totalMass - resourcemass);
@@ -592,58 +596,62 @@ namespace Orion
 			if (!this.staged && GameSettings.LAUNCH_STAGES.GetKeyDown() && this.vessel.isActiveVessel && (this.part.inverseStage == StageManager.CurrentStage - 1 || StageManager.CurrentStage == 0)) { ActivateEngine(); }
 			if (this.staged)
 			{
-				if (EngineEnabled)
+				if (HighLogic.LoadedSceneIsFlight && FlightGlobals.ready && !vessel.packed && vessel.IsControllable)
 				{
-					if (hasFired)
+					if (EngineEnabled)
 					{
-						AnimDelay -= TimeWarp.fixedDeltaTime;
-						if (AnimDelay <= 0)
+						if (hasFired)
 						{
-							inialVelocity = vessel.rb_velocity;
-							Detonate();
-							AnimSpeed = 1;
-							AnimState.enabled = true;
-							AnimState.normalizedTime = 0;
-							AnimState.speed = AnimSpeed;
-							AnimState.normalizedTime = Mathf.Repeat(AnimState.normalizedTime, 1);
-							hasFired = false;
-							if (TimeWarp.CurrentRate == 1)
+							AnimDelay -= TimeWarp.fixedDeltaTime;
+							if (AnimDelay <= 0)
 							{
-								ImpulseTime = 0.10f;
-							}
-							else
-							{
-								part.rb.AddForceAtPosition((transform.up) * (float)NPUImpulse, transform.position, ForceMode.Impulse);
-								// has issues with timewarp - impulse is delivered over ~ 8 frames at TW = 1; higher timewarp reduces  frames,
-							// and thus total impulse delivered - this is a problem, as dV thus varies dependant on timewarp level
-							// so if timewarping, simply add instantaneous impulse. may shake fragile vessels apart; Kerbs w/ g-limits on may black out
+								inialVelocity = vessel.rb_velocity;
+								Detonate();
+								AnimSpeed = 1;
+								AnimState.enabled = true;
+								AnimState.normalizedTime = 0;
+								AnimState.speed = AnimSpeed;
+								AnimState.normalizedTime = Mathf.Repeat(AnimState.normalizedTime, 1);
+								hasFired = false;
+								if (TimeWarp.CurrentRate == 1)
+								{
+									//ImpulseTime = 0.10f; complaints about impulse from Orion, lets see if longer cycle fixes things
+									ImpulseTime = 0.30f;
+								}
+								else
+								{
+									part.rb.AddForceAtPosition((transform.up) * (float)NPUImpulse, transform.position, ForceMode.Impulse);
+									// has issues with timewarp - impulse is delivered over ~ 8 frames at TW = 1; higher timewarp reduces  frames,
+									// and thus total impulse delivered - this is a problem, as dV thus varies dependant on timewarp level
+									// so if timewarping, simply add instantaneous impulse. may shake fragile vessels apart; Kerbs w/ g-limits on may black out
+								}
 							}
 						}
-					}
-					
-					if (TimeWarp.CurrentRate == 1)
-					{
-						ImpulseTime -= TimeWarp.fixedDeltaTime;
-						if (ImpulseTime > 0)
+
+						if (TimeWarp.CurrentRate == 1 && ImpulseTime != -1)
 						{
-							double ImpulseCurve = ((Math.Sin(ImpulseTime * 10 * Math.PI) * NPUImpulse) / 3);
-							part.rb.AddForceAtPosition((transform.up) * (float)ImpulseCurve, transform.position, ForceMode.Impulse);
-						}
-						if (ImpulseTime <= 0)
-						{
-							ImpulseTime = -1;
+							if (ImpulseTime > 0)
+							{
+								double ImpulseCurve = ((Math.Sin(ImpulseTime * 10 * Math.PI) * NPUImpulse) / 3); // have to recalc what the new sum of the curve is, but 3 diverges from dV theorized thrust by ~2.6% 
+								//part.rb.AddForceAtPosition((transform.up) * (float)ImpulseCurve, transform.position, ForceMode.Impulse);
+								part.rb.AddForceAtPosition((transform.up) * (float)ImpulseCurve * 50, transform.position, ForceMode.Force); //lets see if this smooths out the ride
+								ImpulseTime -= TimeWarp.fixedDeltaTime;
+							}
+							if (ImpulseTime <= 0)
+							{
+								ImpulseTime = -1;
+							}
 						}
 					}
 				}
-			}
+			}		
 		}
 
 		#endregion KSP Events
 
 		#region NPU Deployment 
 
-		public bool hasFired = false;
-		double AnimDelay;
+
 		private void FireEngine()
 		{	
 				part.rb.AddForceAtPosition((transform.up) * (90 * (float)NPUMass), transform.position, ForceMode.Impulse); // recoil from firing pulse charge @ 90m/s
@@ -670,7 +678,7 @@ namespace Orion
 
 			NukeFX.CreateExplosion(thrustTransform.position, (float)BlastRadius, (float)yield, (float)atmoDensity, OrionFX, inialVelocity, thrustTransform.up);
 
-			if (atmoDensity >0) // air to boost the explosion
+			if (atmoDensity >0.05) // air to boost the explosion
 			{
 				audioSource.PlayOneShot(AtmoSFX);
 				audioSource.volume = GameSettings.SHIP_VOLUME * 4f;
@@ -691,8 +699,8 @@ namespace Orion
 									if (partHit.vessel != this.vessel)
 									//if (partHit != this.part) Don't want this, causes lag as entire vessel has to be re-checked every pusle. Just assume the avg vessel is going to be within the blast shadow of the pusher plate
 									{
-										blastImpulse = ((((((((Math.Pow((Math.Pow((Math.Pow((9.54 * Math.Pow(10.0, -3.0) * (2200.0 / distToG0.magnitude)), 1.95)), 4.0) + Math.Pow((Math.Pow((3.01 * (1100.0 / distToG0.magnitude)), 1.25)), 4.0)), 0.25)) * 6.894)
-										* atmoDensity) * Math.Pow(yield, (1.0 / 3.0))))) * ExhaustDamageModifier)) * (partHit.radiativeArea / 3.0);
+										//blastImpulse = ((((((((Math.Pow((Math.Pow((Math.Pow((9.54 * Math.Pow(10.0, -3.0) * (2200.0 / distToG0.magnitude)), 1.95)), 4.0) + Math.Pow((Math.Pow((3.01 * (1100.0 / distToG0.magnitude)), 1.25)), 4.0)), 0.25)) * 6.894)
+										//* atmoDensity) * Math.Pow(yield, (1.0 / 3.0))))) * ExhaustDamageModifier)) * (partHit.radiativeArea / 3.0);
 										partHit.skinTemperature +=((((yield * 337000000) / (4 * Math.PI * Math.Pow(distToG0.magnitude, 2.0)))*(partHit.radiativeArea / 3.0)) * atmoDensity); // Fluence scales linearly w/ yield, 1 Kt will produce between 33 TJ and 337 kJ at 0-1000m,
 									} // everything gets heated via atmosphere
 
@@ -708,9 +716,8 @@ namespace Orion
 											if (p.vessel != this.vessel)
 											//if (p != this.part)
 											{
-												p.rb.AddForceAtPosition((partHit.transform.position - thrustTransform.position).normalized * (float)blastImpulse, partHit.transform.position, ForceMode.Impulse);
-												//rb.AddExplosionForce((float)NPUImpulse, thrustTransform.position, (float)BlastRadius, 0, ForceMode.Impulse);
-												
+												//p.rb.AddForceAtPosition((partHit.transform.position - thrustTransform.position).normalized * (float)blastImpulse, partHit.transform.position, ForceMode.Impulse);
+												rb.AddExplosionForce((float)NPUImpulse, thrustTransform.position, (float)BlastRadius, 0, ForceMode.Impulse);								
 											}
 										}
 									}
@@ -728,7 +735,7 @@ namespace Orion
 										blastImpulse = (((((Math.Pow((Math.Pow((Math.Pow((9.54 * Math.Pow(10.0, -3.0) * (2200.0 / distToEpicenter.magnitude)), 1.95)), 4.0) + Math.Pow((Math.Pow((3.01 * (1100.0 / distToEpicenter.magnitude)), 1.25)), 4.0)), 0.25)) * 6.894)
 									* (atmoDensity)) * Math.Pow(yield, (1.0 / 3.0)))) * ExhaustDamageModifier;
 									}
-									if (blastImpulse > 140)
+									if (blastImpulse > 140) //140kPa, level at which reinforced concrete structures are destroyed
 									{
 										building.Demolish();
 									}
@@ -761,7 +768,8 @@ namespace Orion
 									Vector3 distToG0 = thrustTransform.position - partHit.transform.position;
 									if (partHit.vessel != this.vessel)
 									{
-										blastImpulse = ((((yield * 10) / (4 * Math.PI * Math.Pow(distToG0.magnitude, 2.0))) * (partHit.radiativeArea / 3.0)) * ExhaustDamageModifier);
+										blastImpulse = ((NPUMass * (1 - CollimationFactor)) * 15295.74) / (4 * Math.PI * Math.Pow(distToG0.magnitude, 2.0)) * (partHit.radiativeArea / 3.0) * ExhaustDamageModifier;
+										//using part.raditiveArea/3 as a hack for visible part surface area that would be hit by blast
 									}
 									Ray LoSRay = new Ray(thrustTransform.position, partHit.transform.position - thrustTransform.position);
 									RaycastHit hit;
@@ -777,7 +785,7 @@ namespace Orion
 												partHit.skinTemperature +=((((yield * 33700000) / (4 * Math.PI * Math.Pow(distToG0.magnitude, 2.0)))* (partHit.radiativeArea / 2.0))* ExhaustDamageModifier); // Fluence scales linearly w/ yield, 1 Kt will produce between 33 TJ and 337 kJ at 0-1000m
 												if (rb == null) return;
 												p.rb.AddForceAtPosition((partHit.transform.position - thrustTransform.position).normalized * (float)blastImpulse, partHit.transform.position, ForceMode.Impulse);
-												//rb.AddExplosionForce((float)blastImpulse, thrustTransform.position, (float)BlastRadius);
+												//rb.AddExplosionForce((float)NPUImpulse, thrustTransform.position, (float)BlastRadius);
 											}
 										}
 									}
