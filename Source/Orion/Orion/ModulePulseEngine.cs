@@ -1,4 +1,4 @@
-using KSP.UI.Screens;
+﻿using KSP.UI.Screens;
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -17,17 +17,24 @@ namespace Orion
 		Transform thrustTransform;
 
 		[KSPField]
-		public string AnimName = "EngineAnim";
-		private AnimationState AnimState;
-
-		public float AnimSpeed;
+		public string AnimName = "AnimName";
+		AnimationState AnimState;
 
 		[KSPField]
-		public string deployAnimName = "deployAnim";
-		private AnimationState deployState;
+		public string deployAnimName;
+		AnimationState deployState;
+
+		[KSPField]
+		public bool HasDeployAnim = false;
+
+		public float AnimLength = 1;
+
+		[KSPField]
+		public float AnimationDelay = 0.1f;
 
 		Coroutine extending;
 		Coroutine retracting;
+		Coroutine activating;
 
 		//propellant stuff
 		[KSPField]
@@ -36,25 +43,32 @@ namespace Orion
 
 		private ProtoStageIconInfo FuelGauge;
 
-		public double NPURemaining;
-		public double NPUMax;
+		//public double NPURemaining;
+		public double NPULeft;
+		//public double NPUMax;
 
-		bool canTransferAlert = false;
+		int TransferAlert = 0;
 
 		//Engine operation stuff
-		Vector3 inialVelocity;
+		[KSPField]
+		public bool Medusa = false;
+
+		Vector3 initalVelocity;
 
 		[KSPField(isPersistant = true)]
 		public bool EngineEnabled;
 		[KSPField(isPersistant = true)]
-		public bool enginePacked;
+		public bool enginePacked = false;
 
 		public double timePulse;
 		public float PulseDelay = 0; //linked to throttle setting for NPU release rate. Should be 0.87-1.0s at 100% throttle
+		[KSPField]
+		public float ImpulseDuration = 0.3f;
+
 		public float ImpulseTime = -1;
 
 		public bool hasFired = false;
-		double AnimDelay;
+		double AnimDelay = -1;
 
 		[KSPField(guiActive = true, guiActiveEditor = false, guiName = "#LOC_SPO_Pulsedelay")]
 		public string timeTillPulse;
@@ -65,6 +79,15 @@ namespace Orion
 		[KSPField(isPersistant = true, guiActive = true, guiActiveEditor = true, guiName = "#LOC_SPO_YieldSelect"),
 		UI_FloatRange(minValue = 0.05f, maxValue = 5f, stepIncrement = 0.05f, scene = UI_Scene.All, affectSymCounterparts = UI_Scene.All)]
 		public float yield = 1.0f; //yield in kT of pulse unit
+
+		[KSPField]
+		public float MinYield = 0.05f;
+
+		[KSPField]
+		public float MaxYield = 5.0f;
+
+		[KSPField]
+		public float YieldIncrement = 0.05f;
 
 		[KSPField(isPersistant = true, guiActive = true, guiName = "#LOC_SPO_Impulse", guiActiveEditor = false)]
 		public string ImpulseDisplay;
@@ -128,250 +151,73 @@ namespace Orion
 		AttachNode bottom;
 		#endregion KSPFields
 
-		#region Action Groups
-
-		[KSPAction("#autoLOC_6001380")] // Toggle Engine
-		public void AGToggle(KSPActionParam param)
-		{
-			ToggleEngine();
-		}
-		[KSPAction("#autoLOC_6001382")] //Activate Engine
-		public void AGActivate(KSPActionParam param)
-		{
-			ActivateEngine();
-		}
-		[KSPAction("#autoLOC_6001381")] //Shutdown Engine
-		public void AGDeactivate(KSPActionParam param)
-		{
-			DeactivateEngine();
-		}
-		[KSPAction("#LOC_SPO_TogglePlate")] // Toggle Deployment
-		public void AGPlateToggle(KSPActionParam param)
-		{
-			TogglePlate();
-		}
-		[KSPAction("#LOC_SPO_RetractPlate")] //retract Engine
-		public void AGRetract(KSPActionParam param)
-		{
-			StopAnim();
-			retracting = StartCoroutine(Retract());
-		}
-		[KSPAction("#LOC_SPO_ExtendPlate")] //extend Engine
-		public void AGExtend(KSPActionParam param)
-		{
-			StopAnim();
-			extending = StartCoroutine(Extend());
-		}
-		[KSPField(guiActive = true, guiActiveEditor = false, guiName = "#autoLOC_475347")] //Status:
-		public string guiStatusString = Localizer.Format("#autoLOC_227562"); //Off
-
-		//PartWindow buttons
-		[KSPEvent(guiActive = true, guiName = "#autoLOC_6001382", active = true)] //Activate Engine
-		public void ToggleEngine()
-		{
-			if (!EngineEnabled)
-			{
-				ActivateEngine();
-			}
-			else
-			{
-				DeactivateEngine();
-			}
-		}
-		public void ActivateEngine()
-		{
-			if (enginePacked) // in case engine activated via AG while retracted
-			{
-				if (extending == null)
-				{
-					StopAnim();
-					extending = StartCoroutine(Extend());
-				}
-				return;
-			}
-			deployState.enabled = false;
-			guiStatusString = Localizer.Format("#autoLOC_219034"); //Nominal
-			this.staged = true;
-			Events["ToggleEngine"].guiName = Localizer.Format("#autoLOC_6001381"); //Shutdown Engine
-			EngineEnabled = true;
-			Events["TogglePlate"].active = false; //disable plate retract
-			Events["TogglePlate"].guiActive = false;
-			if (FuelGauge == null)
-			{
-				FuelGauge = InitFuelGauge();
-			}
-		}
-		public void DeactivateEngine()
-		{
-			//Debug.Log("[Orion]: Engine Shutdown called");
-			guiStatusString = Localizer.Format("#autoLOC_227562"); //Off
-			EngineEnabled = false;
-			this.staged = false;
-			Events["ToggleEngine"].guiName = Localizer.Format("#autoLOC_6001382"); //Activate Engine
-			Events["TogglePlate"].active = true; //enable plate retraction
-			Events["TogglePlate"].guiActive = true;
-			if (FuelGauge != null)
-			{
-				part.stackIcon.ClearInfoBoxes();
-				FuelGauge = null;
-			}// add a retract/extend plate anim for more compact designs - ie. sticking an orion drive onto of a conventional lifter as a 2nd stage?
-		}
-		[KSPEvent(isPersistent = true, guiActive = true, guiActiveEditor = true, guiName = "#LOC_SPO_RetractPlate", active = true)] //retract plate
-		public void TogglePlate()
-		{
-			if (!enginePacked)
-			{
-				StopAnim();
-				retracting = StartCoroutine(Retract());
-			}
-			else
-			{
-				StopAnim();
-				extending = StartCoroutine(Extend());
-			}
-		}
-		/////////////////////
-		IEnumerator Extend()
-		{
-			if (bottom.FindOpposingNode() == null)
-			{
-				AnimState.enabled = false;
-				deployState.enabled = true;
-				deployState.speed = -1;
-				while (deployState.normalizedTime > 0) //wait for animation here
-				{
-					yield return null;
-				}
-				deployState.normalizedTime = 0;
-				deployState.speed = 0;
-				bottom.nodeType = AttachNode.NodeType.Dock;
-				bottom.radius = 0.001f;
-				deployState.enabled = false;
-				AnimState.enabled = true;
-				enginePacked = false;
-				Events["TogglePlate"].guiName = Localizer.Format("#LOC_SPO_RetractPlate"); //Retract Plate
-				Events["ToggleEngine"].active = true;
-				Events["ToggleEngine"].guiActive = true;
-			}
-			else
-			{
-				ScreenMessages.PostScreenMessage(Localizer.Format("#LOC_SPO_PlateBlocked"), 3.0f, ScreenMessageStyle.UPPER_CENTER);
-			}
-		}
-
-		IEnumerator Retract()
-		{
-			DeactivateEngine();
-			AnimState.enabled = false;
-			deployState.enabled = true;
-			deployState.speed = 1;
-			while (deployState.normalizedTime < 1)
-			{
-				yield return null;
-			}
-			deployState.normalizedTime = 1;
-			deployState.speed = 0;
-			bottom.nodeType = AttachNode.NodeType.Stack;
-			bottom.radius = 0.4f;
-			//deployState.enabled = false;
-			enginePacked = true;
-			Events["TogglePlate"].guiName = Localizer.Format("#LOC_SPO_ExtendPlate"); //Extend Plate
-			Events["ToggleEngine"].active = false; //disable engine activation while retracted
-			Events["ToggleEngine"].guiActive = false;
-		}
-		void StopAnim()
-		{
-			if (retracting != null)
-			{
-				StopCoroutine(retracting);
-				retracting = null;
-			}
-			if (extending != null)
-			{
-				StopCoroutine(extending);
-				extending = null;
-			}
-		}
-
-		///////////////////////////////
-		[KSPAction("#LOC_SPO_YieldUp")]
-		public void AGYieldUp(KSPActionParam param)
-		{
-			IncreaseYield();
-		}
-		[KSPAction("#LOC_SPO_YieldDown")]
-		public void AGYieldDown(KSPActionParam param)
-		{
-			DecreaseYield();
-		}
-		public void IncreaseYield()
-		{
-			if (yield <= 4.5)
-			{
-				yield += 0.5f;
-				ScreenMessages.PostScreenMessage((Localizer.Format("#LOC_SPO_YieldSelect") + ": "+ yield), 3.0f, ScreenMessageStyle.UPPER_CENTER);
-			}
-		}
-		public void DecreaseYield()
-		{
-			if (yield >= 1.0)
-			{
-				yield -= 0.5f;
-				ScreenMessages.PostScreenMessage((Localizer.Format("#LOC_SPO_YieldSelect") + ": " + yield), 3.0f, ScreenMessageStyle.UPPER_CENTER);
-			}
-		}
-
-		#endregion Action Groups
-
 		#region Events
 		public override void OnAwake()
 		{
 			base.OnAwake();
 
 			part.stagingIconAlwaysShown = true;
-			this.part.stackIconGrouping = StackIconGrouping.SAME_TYPE;
+			part.stackIconGrouping = StackIconGrouping.SAME_TYPE;
 		}
 		public void Start()
 		{
 			part.stagingIconAlwaysShown = true;
-			this.part.stackIconGrouping = StackIconGrouping.SAME_TYPE;
+			part.stackIconGrouping = StackIconGrouping.SAME_TYPE;
 			part.stackIcon.ClearInfoBoxes();
 			bottom = part.FindAttachNode("bottom");
 			bottom.nodeType = AttachNode.NodeType.Dock;
 			bottom.radius = 0.001f;
 			FuelGauge = null;
 			EngineEnabled = false;
-			PropellantID = PartResourceLibrary.Instance.GetDefinition(Propellant).id;
-			NPUMass = GetPulseUnits().info.density;
-			if (!string.IsNullOrEmpty(deployAnimName))
+			thrustTransform = part.FindModelTransform(thrustTransformName);
+			AnimState = SetAnimation(AnimName, part);
+			AnimState.enabled = false;
+
+			UI_FloatRange yieldrange = (UI_FloatRange)Fields["yield"].uiControlEditor;
+			yieldrange.maxValue = MaxYield;
+			yieldrange.minValue = MinYield;
+			yieldrange.stepIncrement = YieldIncrement;
+
+			if (!string.IsNullOrEmpty(deployAnimName) || HasDeployAnim)
 			{
 				deployState = SetAnimation(deployAnimName, part);
 				deployState.enabled = true;
+				deployState.speed = 0;
+				HasDeployAnim = true;
 			}
 			else
 			{
 				Actions["AGExtend"].active = false;
 				Actions["AGRetract"].active = false;
-				Actions["AGRetract"].active = false;
+				Actions["AGPlateToggle"].active = false;
+				Events["TogglePlate"].active = false;
+				Events["TogglePlate"].guiActive = false;
+				Events["TogglePlate"].guiActiveEditor = false;
 			}
 			if (HighLogic.LoadedSceneIsFlight || HighLogic.LoadedSceneIsEditor)
 			{
 				thrustTransform = part.FindModelTransform(thrustTransformName);
-				if (enginePacked)
+				if (HasDeployAnim)
 				{
-					deployState.enabled = true;
-					deployState.speed = 0;
-					deployState.normalizedTime = 1;
-				}
-				else
-				{
-					deployState.normalizedTime = 0;
+					if (enginePacked)
+					{
+						deployState.normalizedTime = 1;
+					}
+					else
+					{
+						deployState.normalizedTime = 0;
+					}
 				}
 			}
-
-			AnimState = SetAnimation(AnimName, part);
-			AnimState.enabled = false;
-			vessel.ActionGroups.SetGroup(KSPActionGroup.REPLACEWITHDEFAULT, true);
+			if (HighLogic.LoadedSceneIsFlight)
+			{
+				hasFired = false;
+				PropellantID = PartResourceLibrary.Instance.GetDefinition(Propellant).id;
+				NPUMass = GetPulseUnits().info.density;
+				vessel.GetConnectedResourceTotals(PropellantID, out double NPURemaining, out double NPUMax);
+				resourcemass = (NPURemaining * NPUMass);
+				NPULeft = NPURemaining;
+			}
 			SetupAudio();
 		}
 
@@ -421,21 +267,21 @@ namespace Orion
 		{
 
 			atmoDensity = vessel.atmDensity;
-				//see about attaching a copy of whatever the colorchanger module used for the scorching visual effect for heatshields to any parts in line of sight affected by NPU heat to scorch them?
-				//Nah, plasma temp estimated ~124000, mostly UV wavelength. Most stuff is opaque to uV, so little heat transferred to plate (is why there's Be Oxide filler - to convert X-Ray fury of detonation into Uv heat
-				//isp calcs for pulse units is NPU propellant mass - a mix of Beryllium Oxide+Tungsten / NPU mass * plasma vel/G
-				// Tungsten plasma vel ~150 km/s, so for 50 kg of propellant and 215 kg total mass, per-NPU Isp is ~3556. if in atmo that becomes 50kg + (1/3 Pi*plateRadius2(6.25)*offset(12.5)*1.2kg/m3 for air*atmdensity
-				//atmo Isp goes up to ~10520s at sea level
-				Isp = (((Math.Ceiling((15295.74f * (((((NPUMass * CollimationFactor) * (yield * 0.2f)) + ((0.3334 * Math.PI * Math.Pow(0.5 * PlateDiameter, 2) * DetonationDist) * 0.0012f * atmoDensity))) / NPUMass)) * 100) / 100)));
-				//NPU mass is constant, but reducing the yield reduces the % propellant flashed into plasma before the radiation case ruptures, determining overall mass delivered to the pusherplate
-				// tl;dr: lower yield bombs less efficient, have lower collimation factor
-				if (!Exhaustdamage)
-				{
-					BlastRadius = 0;
-				}
-				else
-				{
-					BlastRadius = Math.Ceiling((((Math.Pow(yield, 0.43) + 0.3) * 1000.0)) * 100) / 100;
+			//see about attaching a copy of whatever the colorchanger module used for the scorching visual effect for heatshields to any parts in line of sight affected by NPU heat to scorch them?
+			//Nah, plasma temp estimated ~124000, mostly UV wavelength. Most stuff is opaque to uV, so little heat transferred to plate (is why there's Be Oxide filler - to convert X-Ray fury of detonation into Uv heat
+			//isp calcs for pulse units is NPU propellant mass - a mix of Beryllium Oxide+Tungsten / NPU mass * plasma vel/G
+			// Tungsten plasma vel ~150 km/s, so for 50 kg of propellant and 215 kg total mass, per-NPU Isp is ~3556. if in atmo that becomes 50kg + (1/3 Pi*plateRadius2(6.25)*offset(12.5)*1.2kg/m3 for air*atmdensity
+			//atmo Isp goes up to ~10520s at sea level
+			Isp = (((Math.Ceiling((15295.74f * (((((NPUMass * CollimationFactor) * (yield * 0.2f)) + ((0.3334 * Math.PI * Math.Pow(0.5 * PlateDiameter, 2) * DetonationDist) * 0.0012f * atmoDensity))) / NPUMass)) * 100) / 100)));
+			//NPU mass is constant, but reducing the yield reduces the % propellant flashed into plasma before the radiation case ruptures, determining overall mass delivered to the pusherplate
+			// tl;dr: lower yield bombs less efficient, have lower collimation factor
+			if (!Exhaustdamage)
+			{
+				BlastRadius = 0;
+			}
+			else
+			{
+				BlastRadius = Math.Ceiling((((Math.Pow(yield, 0.43) + 0.3) * 1000.0)) * 100) / 100;
 				//Detonation in vac is going to be 95% EMR, with a thin plasmashell of vaporized bomb components moving 10s of km/s. That would be, what, maybe a couple of kN over a spacecraft sized target at <50m range at most?
 				NPUImpulse = Math.Ceiling(((((((Math.Pow((Math.Pow((Math.Pow((9.54 * Math.Pow(10.0, -3.0) * (2200.0 / DetonationDist)), 1.95)), 4.0) + Math.Pow((Math.Pow((3.01 * (2200.0 / DetonationDist)), 1.25)), 4.0)), 0.25)) //something messed up in calc  -should be outputting ~812 @12.5m detonationDist
 					* 6.894) // above equation for overpressure falloff originally outputted Psi, so convert to kPa
@@ -446,19 +292,28 @@ namespace Orion
 					* 100) / 100; //round to 2 decimal places
 
 			}
-				//Thrust = spc.G*massflow*Isp; 9.80665*.215*3557 = 7499.68kn @ 5kt & 1599.89 kn @ 1 kt
-				//Isp = ((NPUImpulse + (90 * NPUMass)) / (9.80665 * NPUMass));//account for impulse from firing the NPU for total Isp
+			//Thrust = spc.G*massflow*Isp; 9.80665*.215*3557 = 7499.68kn @ 5kt & 1599.89 kn @ 1 kt
+			//Isp = ((NPUImpulse + (90 * NPUMass)) / (9.80665 * NPUMass));//account for impulse from firing the NPU for total Isp
 			double drymass = (vessel.totalMass - resourcemass);
-			double massfraction = (vessel.totalMass/drymass);
-			dV = ((((Isp * 9.80665) * Math.Log(massfraction))) //dV from pulse unit detonation
-				+(90* Math.Log(massfraction))); //Isp from NPU shot recoil; isp = ve/g: 90/G, dV is isp*G ln mass fraction, so 90 * ln massfraction
+			double massfraction = (vessel.totalMass / drymass);
+
+			if (!Medusa)
+			{
+				dV = ((((Isp * 9.80665) * Math.Log(massfraction))) //dV from pulse unit detonation
+					+ (90 * Math.Log(massfraction))); //Isp from NPU shot recoil; isp = ve/g: 90/G, dV is isp*G ln mass fraction, so 90 * ln massfraction
+			}
+			else
+			{
+				dV = ((((Isp * 9.80665) * Math.Log(massfraction))) //dV from pulse unit detonation
+				- (90 * Math.Log(massfraction))); //Isp from NPU shot recoil; isp = ve/g: 90/G, dV is isp*G ln mass fraction, so 90 * ln massfraction
+			}
 			// if adding separate NPU magazine parts for more fuel, will need dV calcs for per-stage
 
 			Ispdisplay = (Isp.ToString("0.0") + "s");
 
 			if (dV > 10000)
 			{
-				 dV = dV / 1000;
+				dV = dV / 1000;
 				dVdisplay = (dV.ToString("0.0") + "K m/s");
 			}
 			else
@@ -517,50 +372,23 @@ namespace Orion
 						GetPulseUnits(); // returns NPUs in part, getConnectedResourceTotals is per vessel
 						if (GetPulseUnits().amount >= 1)
 						{
-							hasPulseUnits = true;
-							canTransferAlert = false;
+							TransferAlert = 0;
 							if (guiStatusString == Localizer.Format("#LOC_SPO_noFuel"))
 							{
 								guiStatusString = Localizer.Format("#autoLOC_219034");
 							}
-
-						}
-						else
-						{
-							guiStatusString = Localizer.Format("#LOC_SPO_noFuel");
-							hasPulseUnits = false;
-							canTransferAlert = true;
-						}
-						vessel.GetConnectedResourceTotals(PropellantID, out double NPURemaining, out double NPUMax);
-						resourcemass = (NPURemaining * NPUMass);
-						if ((NPURemaining > 0 && !hasPulseUnits) && canTransferAlert)
-						{
-							ScreenMessages.PostScreenMessage(Localizer.Format("#LOC_SPO_TransferFuel"), 5.0f, ScreenMessageStyle.UPPER_CENTER);
-							canTransferAlert = false;
-						}
-						if (vessel.isActiveVessel)
-						{
-							UpdateFuelGauge((float)(NPURemaining / NPUMax));
-						}
-						else
-						{
-							FuelGauge = null;
-						}
-						if (FuelGauge == null)
-						{
-							part.stackIcon.ClearInfoBoxes();
-						}
-						CalculateNPUStats();
-						if (TimeWarp.WarpMode != TimeWarp.Modes.HIGH || TimeWarp.CurrentRate == 1)
-						{
-							if (hasPulseUnits)
+							if (TimeWarp.WarpMode != TimeWarp.Modes.HIGH || TimeWarp.CurrentRate == 1)
 							{
-								ThrottlePercent = 1 - FlightGlobals.ActiveVessel.ctrlState.mainThrottle;
+								if (vessel.isActiveVessel)
+								{
+									ThrottlePercent = 1 - FlightGlobals.ActiveVessel.ctrlState.mainThrottle;
+								}
 								if (ThrottlePercent < 1)
 								{
-									if (PulseDelay > (Mathf.Clamp((5 * ThrottlePercent), 1, 5)))
+									//if (PulseDelay > (Mathf.Clamp((5 * ThrottlePercent), 1, 5)))
+									if (PulseDelay > (AnimLength * Mathf.Clamp((5 * ThrottlePercent), 1, 5)))
 									{
-										Mathf.Clamp(PulseDelay, 1, (5 * ThrottlePercent));
+										PulseDelay = AnimLength * Mathf.Clamp(PulseDelay, 1, (5 * ThrottlePercent));
 									}
 									if (!GameIsPaused)
 									{
@@ -569,7 +397,7 @@ namespace Orion
 										if (PulseDelay <= 0)
 										{
 											FireEngine();
-											PulseDelay = (Mathf.Clamp((5 * ThrottlePercent), 1, 5));
+											PulseDelay = (AnimLength * Mathf.Clamp((5 * ThrottlePercent), 1, 5));
 										}
 									}
 								}
@@ -578,86 +406,113 @@ namespace Orion
 									PulseDelay = 0.5f; // fire the engine immediatly when throttle becomes > 0. //adding a halfsec pause to ensure CalculateNPUStats has enough time to run
 								}
 								timeTillPulse = PulseDelay.ToString("0.00");
+
 							}
 						}
+						else
+						{
+							guiStatusString = Localizer.Format("#LOC_SPO_noFuel");
+							if (TransferAlert == 0 && NPULeft > 0)
+							{
+								ScreenMessages.PostScreenMessage(Localizer.Format("#LOC_SPO_TransferFuel"), 5.0f, ScreenMessageStyle.UPPER_CENTER);
+								TransferAlert = -1;
+							}
+						}
+						if (FlightGlobals.ActiveVessel != vessel)
+						{
+							FuelGauge = null;
+						}
+						if (FuelGauge == null)
+						{
+							part.stackIcon.ClearInfoBoxes();
+						}
+						CalculateNPUStats();
+
 						//else
 						//{
 						//	ScreenMessages.PostScreenMessage("Engine Blocked", 5.0f, ScreenMessageStyle.UPPER_CENTER);
 						//	FireNPU = false;
 						//}
 					}
+					if (vessel.isActiveVessel)
+					{
+						vessel.GetConnectedResourceTotals(PropellantID, out double NPURemaining, out double NPUMax);
+						UpdateFuelGauge((float)(NPURemaining / NPUMax));
+					}
 					//CheckClearance();				
 				}
 			}
-		}
-		
+		}//for some reason, isn't properly updating NPU counters, when at 1 pulse unit left, declares out of puse units.
+
 		void FixedUpdate()
 		{
-			if (!this.staged && GameSettings.LAUNCH_STAGES.GetKeyDown() && this.vessel.isActiveVessel && (this.part.inverseStage == StageManager.CurrentStage - 1 || StageManager.CurrentStage == 0)) { ActivateEngine(); }
-			if (this.staged)
+			if (HighLogic.LoadedSceneIsFlight && !vessel.packed)
 			{
-				if (HighLogic.LoadedSceneIsFlight && FlightGlobals.ready && !vessel.packed && vessel.IsControllable)
+				if (!this.staged && GameSettings.LAUNCH_STAGES.GetKeyDown() && this.vessel.isActiveVessel && (this.part.inverseStage == StageManager.CurrentStage - 1 || StageManager.CurrentStage == 0))
+				{
+					ActivateEngine();
+				}
+				if (this.staged)
 				{
 					if (EngineEnabled)
 					{
-						if (hasFired)
+						if (!GameIsPaused)
 						{
-							AnimDelay -= TimeWarp.fixedDeltaTime;
-							if (AnimDelay <= 0)
+							if (hasFired && AnimDelay != -1)
 							{
-								inialVelocity = vessel.rb_velocity;
-								Detonate();
-								AnimSpeed = 1;
-								AnimState.enabled = true;
-								AnimState.normalizedTime = 0;
-								AnimState.speed = AnimSpeed;
+								AnimDelay -= TimeWarp.fixedDeltaTime;
+								if (AnimDelay <= 0)
+								{
+									initalVelocity = vessel.rb_velocity;
+									hasFired = false;
+									AnimDelay = -1;
+									Detonate();
+									ImpulseTime = ImpulseDuration;
+								}
 								AnimState.normalizedTime = Mathf.Repeat(AnimState.normalizedTime, 1);
-								hasFired = false;
-								if (TimeWarp.CurrentRate == 1)
-								{
-									//ImpulseTime = 0.10f; complaints about impulse from Orion, lets see if longer cycle fixes things
-									ImpulseTime = 0.30f;
-								}
-								else
-								{
-									part.rb.AddForceAtPosition((transform.up) * (float)NPUImpulse, transform.position, ForceMode.Impulse);
-									// has issues with timewarp - impulse is delivered over ~ 8 frames at TW = 1; higher timewarp reduces  frames,
-									// and thus total impulse delivered - this is a problem, as dV thus varies dependant on timewarp level
-									// so if timewarping, simply add instantaneous impulse. may shake fragile vessels apart; Kerbs w/ g-limits on may black out
-								}
 							}
-						}
-
-						if (TimeWarp.CurrentRate == 1 && ImpulseTime != -1)
-						{
-							if (ImpulseTime > 0)
+							if ((TimeWarp.WarpMode != TimeWarp.Modes.HIGH || TimeWarp.CurrentRate == 1) && ImpulseTime != -1)
 							{
-								double ImpulseCurve = ((Math.Sin(ImpulseTime * 10 * Math.PI) * NPUImpulse) / 3); // have to recalc what the new sum of the curve is, but 3 diverges from dV theorized thrust by ~2.6% 
-								//part.rb.AddForceAtPosition((transform.up) * (float)ImpulseCurve, transform.position, ForceMode.Impulse);
-								part.rb.AddForceAtPosition((transform.up) * (float)ImpulseCurve * 50, transform.position, ForceMode.Force); //lets see if this smooths out the ride
-								ImpulseTime -= TimeWarp.fixedDeltaTime;
-							}
-							if (ImpulseTime <= 0)
-							{
-								ImpulseTime = -1;
+								if (ImpulseTime > 0)
+								{
+									double ImpulseCurve = (NPUImpulse / (ImpulseDuration / TimeWarp.fixedDeltaTime)); //determine impulse per frame
+									part.rb.AddForceAtPosition((-thrustTransform.forward) * ((float)ImpulseCurve / TimeWarp.fixedDeltaTime), transform.position, ForceMode.Force);
+									ImpulseTime -= TimeWarp.fixedDeltaTime;
+								}
+								if (ImpulseTime <= 0)
+								{
+									ImpulseTime = -1;
+								}
 							}
 						}
 					}
 				}
-			}		
+			}
 		}
 
 		#endregion KSP Events
 
 		#region NPU Deployment 
 
-
 		private void FireEngine()
-		{	
-				part.rb.AddForceAtPosition((transform.up) * (90 * (float)NPUMass), transform.position, ForceMode.Impulse); // recoil from firing pulse charge @ 90m/s
-				AnimDelay = 0.1 / TimeWarp.CurrentRate;
-				hasFired = true;
-				GetPulseUnits().amount--;
+		{
+			if (!Medusa)
+			{
+				part.rb.AddForceAtPosition((-thrustTransform.forward) * (90 * (float)NPUMass), transform.position, ForceMode.Impulse); // recoil from firing pulse charge @ 90m/s
+			}
+			else
+			{
+				part.rb.AddForceAtPosition((thrustTransform.forward) * (90 * (float)NPUMass), transform.position, ForceMode.Impulse); // recoil from firing pulse charge @ 90m/s
+			}
+			AnimDelay = (AnimationDelay / TimeWarp.CurrentRate);
+			hasFired = true;
+			GetPulseUnits().amount--;
+			vessel.GetConnectedResourceTotals(PropellantID, out double NPURemaining, out double NPUMax);
+			NPULeft = NPURemaining;
+			resourcemass = (NPURemaining * NPUMass);
+			AnimState.enabled = true;
+			AnimState.normalizedTime = 0;
+			AnimState.speed = 1* TimeWarp.CurrentRate;
 		}
 		public PartResource GetPulseUnits()
 		{
@@ -676,13 +531,13 @@ namespace Orion
 			//affect any nearby parts/vessels that aren't the source vessel
 			double blastImpulse = NPUImpulse; // distance-modified impulse from blastfront on nonvessel parts/debris/ships
 
-			NukeFX.CreateExplosion(thrustTransform.position, (float)BlastRadius, (float)yield, (float)atmoDensity, OrionFX, inialVelocity, thrustTransform.up);
+			NukeFX.CreateExplosion(thrustTransform.position, (float)BlastRadius, (float)yield, (float)atmoDensity, OrionFX, initalVelocity, -thrustTransform.forward);
 
-			if (atmoDensity >0.05) // air to boost the explosion
+			if (atmoDensity > 0.05) // air to boost the explosion
 			{
 				audioSource.PlayOneShot(AtmoSFX);
 				audioSource.volume = GameSettings.SHIP_VOLUME * 4f;
-				using (var blastHits = Physics.OverlapSphere(transform.position, (float)BlastRadius, 9076737).AsEnumerable().GetEnumerator())
+				using (var blastHits = Physics.OverlapSphere(thrustTransform.position, (float)BlastRadius, 9076737).AsEnumerable().GetEnumerator())
 				{
 					while (blastHits.MoveNext())
 					{
@@ -699,9 +554,9 @@ namespace Orion
 									if (partHit.vessel != this.vessel)
 									//if (partHit != this.part) Don't want this, causes lag as entire vessel has to be re-checked every pusle. Just assume the avg vessel is going to be within the blast shadow of the pusher plate
 									{
-										//blastImpulse = ((((((((Math.Pow((Math.Pow((Math.Pow((9.54 * Math.Pow(10.0, -3.0) * (2200.0 / distToG0.magnitude)), 1.95)), 4.0) + Math.Pow((Math.Pow((3.01 * (1100.0 / distToG0.magnitude)), 1.25)), 4.0)), 0.25)) * 6.894)
-										//* atmoDensity) * Math.Pow(yield, (1.0 / 3.0))))) * ExhaustDamageModifier)) * (partHit.radiativeArea / 3.0);
-										partHit.skinTemperature +=((((yield * 337000000) / (4 * Math.PI * Math.Pow(distToG0.magnitude, 2.0)))*(partHit.radiativeArea / 3.0)) * atmoDensity); // Fluence scales linearly w/ yield, 1 Kt will produce between 33 TJ and 337 kJ at 0-1000m,
+										blastImpulse = ((((((((Math.Pow((Math.Pow((Math.Pow((9.54 * Math.Pow(10.0, -3.0) * (2200.0 / distToG0.magnitude)), 1.95)), 4.0) + Math.Pow((Math.Pow((3.01 * (1100.0 / distToG0.magnitude)), 1.25)), 4.0)), 0.25)) * 6.894)
+										* atmoDensity) * Math.Pow(yield, (1.0 / 3.0))))) * ExhaustDamageModifier)) * (partHit.radiativeArea / 3.0);
+										partHit.skinTemperature += ((((yield * 337000000) / (4 * Math.PI * Math.Pow(distToG0.magnitude, 2.0))) * (partHit.radiativeArea / 3.0)) * atmoDensity); // Fluence scales linearly w/ yield, 1 Kt will produce between 33 TJ and 337 kJ at 0-1000m,
 									} // everything gets heated via atmosphere
 
 									Ray LoSRay = new Ray(thrustTransform.position, partHit.transform.position - thrustTransform.position);
@@ -716,8 +571,7 @@ namespace Orion
 											if (p.vessel != this.vessel)
 											//if (p != this.part)
 											{
-												//p.rb.AddForceAtPosition((partHit.transform.position - thrustTransform.position).normalized * (float)blastImpulse, partHit.transform.position, ForceMode.Impulse);
-												rb.AddExplosionForce((float)NPUImpulse, thrustTransform.position, (float)BlastRadius, 0, ForceMode.Impulse);								
+												p.rb.AddForceAtPosition((partHit.transform.position - thrustTransform.position).normalized * (float)blastImpulse, partHit.transform.position, ForceMode.Impulse);
 											}
 										}
 									}
@@ -752,7 +606,7 @@ namespace Orion
 			else //exoatmo detonation
 			{
 				audioSource.PlayOneShot(VacSFX);
-				using (var blastHits = Physics.OverlapSphere(transform.position, (float)BlastRadius, 9076737).AsEnumerable().GetEnumerator())
+				using (var blastHits = Physics.OverlapSphere(thrustTransform.position, (float)BlastRadius, 9076737).AsEnumerable().GetEnumerator())
 				{
 					while (blastHits.MoveNext())
 					{
@@ -779,13 +633,12 @@ namespace Orion
 										Part p = eva ? eva.part : hit.collider.gameObject.GetComponentInParent<Part>();
 										if (p == partHit)
 										{
+											if (rb == null) return;
 											if (p.vessel != this.vessel)
 											//if (p != this.part)
 											{
-												partHit.skinTemperature +=((((yield * 33700000) / (4 * Math.PI * Math.Pow(distToG0.magnitude, 2.0)))* (partHit.radiativeArea / 2.0))* ExhaustDamageModifier); // Fluence scales linearly w/ yield, 1 Kt will produce between 33 TJ and 337 kJ at 0-1000m
-												if (rb == null) return;
+												partHit.skinTemperature += ((((yield * 33700000) / (4 * Math.PI * Math.Pow(distToG0.magnitude, 2.0))) * (partHit.radiativeArea / 2.0)) * ExhaustDamageModifier); // Fluence scales linearly w/ yield, 1 Kt will produce between 33 TJ and 337 kJ at 0-1000m
 												p.rb.AddForceAtPosition((partHit.transform.position - thrustTransform.position).normalized * (float)blastImpulse, partHit.transform.position, ForceMode.Impulse);
-												//rb.AddExplosionForce((float)NPUImpulse, thrustTransform.position, (float)BlastRadius);
 											}
 										}
 									}
@@ -819,12 +672,267 @@ namespace Orion
 
 		#endregion
 
+		#region Action Groups
+
+		[KSPAction("#autoLOC_6001380")] // Toggle Engine
+		public void AGToggle(KSPActionParam param)
+		{
+			ToggleEngine();
+		}
+		[KSPAction("#autoLOC_6001382")] //Activate Engine
+		public void AGActivate(KSPActionParam param)
+		{
+			ActivateEngine();
+		}
+		[KSPAction("#autoLOC_6001381")] //Shutdown Engine
+		public void AGDeactivate(KSPActionParam param)
+		{
+			DeactivateEngine();
+		}
+		[KSPAction("#LOC_SPO_TogglePlate")] // Toggle Deployment
+		public void AGPlateToggle(KSPActionParam param)
+		{
+			TogglePlate();
+		}
+		[KSPAction("#LOC_SPO_RetractPlate")] //retract Engine
+		public void AGRetract(KSPActionParam param)
+		{
+			StopAnim();
+			retracting = StartCoroutine(Retract());
+		}
+		[KSPAction("#LOC_SPO_ExtendPlate")] //extend Engine
+		public void AGExtend(KSPActionParam param)
+		{
+			StopAnim();
+			extending = StartCoroutine(Extend());
+		}
+		[KSPField(guiActive = true, guiActiveEditor = false, guiName = "#autoLOC_475347")] //Status:
+		public string guiStatusString = Localizer.Format("#autoLOC_227562"); //Off
+
+		//PartWindow buttons
+		[KSPEvent(guiActive = true, guiName = "#autoLOC_6001382", active = true)] //Activate Engine
+		public void ToggleEngine()
+		{
+			if (!EngineEnabled)
+			{
+				ActivateEngine();
+			}
+			else
+			{
+				DeactivateEngine();
+			}
+		}
+		public void ActivateEngine()
+		{
+			if (EngineEnabled == true)
+			{
+				return;
+			}
+			if (HasDeployAnim)
+			{
+				if (enginePacked) // in case engine activated via AG while retracted
+				{
+					if (extending == null || activating == null)
+					{
+						StopAnim();
+						activating = StartCoroutine(ExtendAndActivate());
+					}
+					return;
+				}
+				deployState.enabled = false;
+			}
+			guiStatusString = Localizer.Format("#autoLOC_219034"); //Nominal
+			staged = true;
+			Events["ToggleEngine"].guiName = Localizer.Format("#autoLOC_6001381"); //Shutdown Engine
+			EngineEnabled = true;
+			Events["TogglePlate"].active = false; //disable plate retract
+			Events["TogglePlate"].guiActive = false;
+			if (FuelGauge == null)
+			{
+				FuelGauge = InitFuelGauge();
+			}
+			thrustTransform = part.FindModelTransform(thrustTransformName);
+		}
+		public void DeactivateEngine()
+		{
+			if (EngineEnabled == false)
+			{
+				return;
+			}
+			guiStatusString = Localizer.Format("#autoLOC_227562"); //Off
+			EngineEnabled = false;
+			//this.staged = false;
+			Events["ToggleEngine"].guiName = Localizer.Format("#autoLOC_6001382"); //Activate Engine
+			if (HasDeployAnim)
+			{
+				Events["TogglePlate"].active = true; //enable plate retraction
+				Events["TogglePlate"].guiActive = true;
+			}
+			if (FuelGauge != null)
+			{
+				part.stackIcon.ClearInfoBoxes();
+				FuelGauge = null;
+			}
+		}
+		[KSPEvent(isPersistent = true, guiActive = true, guiActiveEditor = true, guiName = "#LOC_SPO_RetractPlate", active = true)] //retract plate
+		public void TogglePlate()
+		{
+			if (!enginePacked)
+			{
+				StopAnim();
+				retracting = StartCoroutine(Retract());
+			}
+			else
+			{
+				StopAnim();
+				extending = StartCoroutine(Extend());
+			}
+		}
+		/////////////////////
+		IEnumerator Extend()
+		{
+			if (bottom.FindOpposingNode() == null)
+			{
+				AnimState.enabled = false;
+				deployState.enabled = true;
+				deployState.speed = -1;
+				while (deployState.normalizedTime > 0) //wait for animation here
+				{
+					yield return null;
+				}
+				deployState.normalizedTime = 0;
+				deployState.speed = 0;
+				bottom.nodeType = AttachNode.NodeType.Dock;
+				bottom.radius = 0.001f;
+				deployState.enabled = false;
+				AnimState.enabled = true;
+				enginePacked = false;
+				Events["TogglePlate"].guiName = Localizer.Format("#LOC_SPO_RetractPlate"); //Retract Plate
+				Events["ToggleEngine"].active = true;
+				Events["ToggleEngine"].guiActive = true;
+			}
+			else
+			{
+				ScreenMessages.PostScreenMessage(Localizer.Format("#LOC_SPO_PlateBlocked"), 3.0f, ScreenMessageStyle.UPPER_CENTER);
+			}
+		}
+		IEnumerator ExtendAndActivate()
+		{
+			if (bottom.FindOpposingNode() == null)
+			{
+				AnimState.enabled = false;
+				deployState.enabled = true;
+				deployState.speed = -1;
+				while (deployState.normalizedTime > 0) //wait for animation here
+				{
+					yield return null;
+				}
+				deployState.normalizedTime = 0;
+				deployState.speed = 0;
+				bottom.nodeType = AttachNode.NodeType.Dock;
+				bottom.radius = 0.001f;
+				deployState.enabled = false;
+				AnimState.enabled = true;
+				enginePacked = false;
+				Events["TogglePlate"].guiName = Localizer.Format("#LOC_SPO_RetractPlate"); //Retract Plate
+				Events["TogglePlate"].active = false; //disable plate retract
+				Events["TogglePlate"].guiActive = false;
+				Events["ToggleEngine"].active = true;
+				Events["ToggleEngine"].guiActive = true;
+				guiStatusString = Localizer.Format("#autoLOC_219034"); //Nominal
+				staged = true;
+				Events["ToggleEngine"].guiName = Localizer.Format("#autoLOC_6001381"); //Shutdown Engine
+				EngineEnabled = true;
+				if (FuelGauge == null)
+				{
+					FuelGauge = InitFuelGauge();
+				}
+				thrustTransform = part.FindModelTransform(thrustTransformName);
+			}
+			else
+			{
+				ScreenMessages.PostScreenMessage(Localizer.Format("#LOC_SPO_PlateBlocked"), 3.0f, ScreenMessageStyle.UPPER_CENTER);
+			}
+		}
+		IEnumerator Retract()
+		{
+			DeactivateEngine();
+			AnimState.enabled = false;
+			deployState.enabled = true;
+			deployState.speed = 1;
+			while (deployState.normalizedTime < 1)
+			{
+				yield return null;
+			}
+			deployState.normalizedTime = 1;
+			deployState.speed = 0;
+			bottom.nodeType = AttachNode.NodeType.Stack;
+			bottom.radius = 0.4f;
+			//deployState.enabled = false;
+			enginePacked = true;
+			Events["TogglePlate"].guiName = Localizer.Format("#LOC_SPO_ExtendPlate"); //Extend Plate
+			Events["ToggleEngine"].active = false; //disable engine activation while retracted
+			Events["ToggleEngine"].guiActive = false;
+		}
+		void StopAnim()
+		{
+			if (retracting != null)
+			{
+				StopCoroutine(retracting);
+				retracting = null;
+			}
+			if (extending != null)
+			{
+				StopCoroutine(extending);
+				extending = null;
+			}
+			if (activating != null)
+			{
+				StopCoroutine(activating);
+				activating = null;
+			}
+		}
+
+		///////////////////////////////
+		[KSPAction("#LOC_SPO_YieldUp")]
+		public void AGYieldUp(KSPActionParam param)
+		{
+			IncreaseYield();
+		}
+		[KSPAction("#LOC_SPO_YieldDown")]
+		public void AGYieldDown(KSPActionParam param)
+		{
+			DecreaseYield();
+		}
+		public void IncreaseYield()
+		{
+			if (yield <= 4.5)
+			{
+				yield += 0.5f;
+				ScreenMessages.PostScreenMessage((Localizer.Format("#LOC_SPO_YieldSelect") + ": " + yield), 3.0f, ScreenMessageStyle.UPPER_CENTER);
+			}
+		}
+		public void DecreaseYield()
+		{
+			if (yield >= 1.0)
+			{
+				yield -= 0.5f;
+				ScreenMessages.PostScreenMessage((Localizer.Format("#LOC_SPO_YieldSelect") + ": " + yield), 3.0f, ScreenMessageStyle.UPPER_CENTER);
+			}
+		}
+
+		#endregion Action Groups
+
 		#region Updates
 
 		void UpdateFuelGauge(float resourceamount)
 		{
 			if (EngineEnabled && vessel.isActiveVessel)
 			{
+				if (FuelGauge == null)
+				{
+					InitFuelGauge();
+				}
 				FuelGauge?.SetValue(resourceamount, 0, 1);
 			}
 			else
@@ -835,7 +943,7 @@ namespace Orion
 					FuelGauge = null;
 				}
 			}
-		}		
+		}
 
 		private ProtoStageIconInfo InitFuelGauge()
 		{
@@ -870,11 +978,11 @@ namespace Orion
 		{
 			StringBuilder output = new StringBuilder();
 			output.Append(Environment.NewLine);
-			output.AppendLine(Localizer.Format("#LOC_SPO_PUY") +$": {yield}");
-			output.AppendLine(Localizer.Format("#LOC_SPO_MinYield") +": 0.5 kT");
-			output.AppendLine(Localizer.Format("#LOC_SPO_MaxYield") +": 5.0 kT");
-			output.AppendLine(Localizer.Format("#LOC_SPO_BlastRadius") +$": {BlastRadius} m");
-			output.AppendLine(Localizer.Format("#LOC_SPO_VacImpulse") +$": {Isp} @ 1kT");
+			output.AppendLine(Localizer.Format("#LOC_SPO_PUY") + $": {yield}");
+			output.AppendLine(Localizer.Format("#LOC_SPO_MinYield") + ": 0.5 kT");
+			output.AppendLine(Localizer.Format("#LOC_SPO_MaxYield") + ": 5.0 kT");
+			output.AppendLine(Localizer.Format("#LOC_SPO_BlastRadius") + $": {BlastRadius} m");
+			output.AppendLine(Localizer.Format("#LOC_SPO_VacImpulse") + $": {Isp} @ 1kT");
 
 			return output.ToString();
 		}

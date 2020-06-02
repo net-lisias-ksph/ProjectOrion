@@ -46,7 +46,7 @@ namespace Orion
 			LightFx = gameObject.AddComponent<Light>();
 			LightFx.color = XKCDColors.Ecru;
 			LightFx.intensity = 1;
-			LightFx.range = 200;
+			LightFx.range = 100*Yield;
 			LightFx.shadows = LightShadows.None;
 
 			transform.position = Position;
@@ -82,11 +82,11 @@ namespace Orion
 				}
 				pe.Dispose();
 			}
-			
 			else if (TimeIndex > LifeTime)
 			{
 				ExplosionsLoaded.Dequeue();
 				Destroy(gameObject);
+				Destroy(LightFx);
 				Destroy(this);
 				return;
 			}
@@ -96,7 +96,8 @@ namespace Orion
 		{
 			if (TimeIndex >= 0.04 && Atmosphere < 0.05f)
 			{
-				transform.position = Position; // need a way to attach the FX to the transform to get it to travel w/ the vessel to make sure FX spawns where it needs to, but then be subject to world movement, not vessel movement, so vessel can "move away from the explosion"
+				transform.position = Position;
+				//transform.position -= Direction * 20 * TimeWarp.fixedDeltaTime; // need a way to attach the FX to the transform to get it to travel w/ the vessel to make sure FX spawns where it needs to, but then be subject to world movement, not vessel movement, so vessel can "move away from the explosion"
 			} // do a hack with the FX having a local vel or force?
 			else
 			{
@@ -143,3 +144,5 @@ namespace Orion
 		}
 	}
 }
+//instead of having a new nukeFX instance created every pulse, see if I can't convert it to have the nukeFX spawn as a singular instance per Orion, and just vary Emitter/light scale, with scales = 0 for engine off; would remove potential memory leak
+//need for garbage collection, due to onlt one FX being created, instead of hundreds
