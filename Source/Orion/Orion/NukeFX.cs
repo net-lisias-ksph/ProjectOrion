@@ -26,7 +26,7 @@ namespace Orion
 		{
 			ExplosionsLoaded.Enqueue(this);
 			StartTime = Time.time;
-			LifeTime = Mathf.Clamp(Atmosphere, 0.04f, 1)*5;
+			LifeTime = Mathf.Clamp(Atmosphere, 0.04f, 1) * 5;
 			PEmitters = gameObject.GetComponentsInChildren<KSPParticleEmitter>();
 			IEnumerator<KSPParticleEmitter> pe = PEmitters.AsEnumerable().GetEnumerator();
 			while (pe.MoveNext())
@@ -46,7 +46,7 @@ namespace Orion
 			LightFx = gameObject.AddComponent<Light>();
 			LightFx.color = XKCDColors.Ecru;
 			LightFx.intensity = 1;
-			LightFx.range = 100*Yield;
+			LightFx.range = 100 * Yield;
 			LightFx.shadows = LightShadows.None;
 
 			transform.position = Position;
@@ -67,7 +67,7 @@ namespace Orion
 				if (TimeIndex > 0.05)
 				{
 					LightFx.range -= 1300 * Time.deltaTime;
-					LightFx.intensity  = 0;
+					LightFx.intensity = 0;
 				}
 			}
 
@@ -109,7 +109,7 @@ namespace Orion
 			}
 		}
 
-		public static void CreateExplosion(Vector3 position, float BlastRadius, float yield, float atmosphere, string explModelPath, Vector3 initvel, Vector3 direction = default(Vector3))
+		public static void CreateExplosion(Vector3 position, float yield, float atmosphere, string explModelPath, Vector3 initvel, Vector3 direction = default(Vector3))
 		{
 			//if (ExplosionsLoaded.Count > 20) return; // dequeue doesn't remove loaded items from the count, even over reverts to launch
 			var go = GameDatabase.Instance.GetModel(explModelPath);
@@ -121,7 +121,6 @@ namespace Orion
 
 			GameObject newExplosion = (GameObject)Instantiate(go, position, rotation);
 			NukeFX eFx = newExplosion.AddComponent<NukeFX>();
-			eFx.BlastRadius = BlastRadius;
 			eFx.Position = position;
 			eFx.Yield = yield;
 			eFx.Direction = direction;
@@ -134,11 +133,11 @@ namespace Orion
 			{
 				if (pe.Current == null) continue;
 				pe.Current.emit = true;
-				pe.Current.maxSize *= (0.8f * (1 + (yield / 20))) * Mathf.Clamp(atmosphere, 0.125f, 1);
-				pe.Current.minSize *= (0.8f * (1 + (yield / 20))) * Mathf.Clamp(atmosphere, 0.125f, 1);
+				pe.Current.maxSize *= ((yield / 2)+1) * Mathf.Clamp(atmosphere, 0.2f, 1);
+				pe.Current.minSize *= ((yield / 2) + 1) * Mathf.Clamp(atmosphere, 0.2f, 1);
 
-				pe.Current.maxEnergy =  Mathf.Clamp(atmosphere, 0.01f, 1)*5;
-				pe.Current.minEnergy =  Mathf.Clamp(atmosphere, 0.01f, 1)*5;
+				pe.Current.maxEnergy = Mathf.Clamp(atmosphere, 0.01f, 1) * 7;
+				pe.Current.minEnergy = Mathf.Clamp(atmosphere, 0.01f, 1) * 5;		
 			}
 			pe.Dispose();
 		}

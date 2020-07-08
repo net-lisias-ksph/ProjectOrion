@@ -102,10 +102,14 @@ namespace Orion
 		[KSPField(isPersistant = true, guiActive = true, guiName = "#LOC_SPO_dV")]
 		public string dVdisplay;
 
+		[KSPField(isPersistant = true, guiActive = true, guiName = "#LOC_SPO_PulsedV")]
+		public string PulsedVdisplay;
+
 		public double Isp = 711;
 		public double dV;
+		public double PulsedV;
 
-		public double NPUMass = 0.645; //placeholder, mass grabbed from resource def
+		public double NPUMass = 0.445; //placeholder, mass grabbed from resource def
 
 		//[KSPField]
 		//public double NPUPMass = 0.15; //mass in tons of Tungsten/Beryllium propellant. Used to determine collimation factor (% of bomb mass that hits plate as plasma)
@@ -134,7 +138,8 @@ namespace Orion
 		[KSPField] public string AtmoBlastSFX;
 		[KSPField] public string VacBlastSFX;
 
-		[KSPField] public string OrionFX = "Orion/FX/NukeFX";
+		[KSPField] public string OrionAtmoFX = "Orion/FX/AtmoNukeFX";
+		[KSPField] public string OrionVacFX = "Orion/FX/VacNukeFX";
 
 		AudioClip AtmoSFX;
 		AudioClip VacSFX;
@@ -172,11 +177,7 @@ namespace Orion
 			thrustTransform = part.FindModelTransform(thrustTransformName);
 			AnimState = SetAnimation(AnimName, part);
 			AnimState.enabled = false;
-
-			UI_FloatRange yieldrange = (UI_FloatRange)Fields["yield"].uiControlEditor;
-			yieldrange.maxValue = MaxYield;
-			yieldrange.minValue = MinYield;
-			yieldrange.stepIncrement = YieldIncrement;
+			AnimLength = AnimState.length;
 
 			if (!string.IsNullOrEmpty(deployAnimName) || HasDeployAnim)
 			{
@@ -196,12 +197,20 @@ namespace Orion
 			}
 			if (HighLogic.LoadedSceneIsFlight || HighLogic.LoadedSceneIsEditor)
 			{
+				UI_FloatRange yieldrange = (UI_FloatRange)Fields["yield"].uiControlEditor; //maxe sure this is modifying the PAW in the VAB
+				yieldrange.maxValue = MaxYield;
+				yieldrange.minValue = MinYield;
+				yieldrange.stepIncrement = YieldIncrement;
 				thrustTransform = part.FindModelTransform(thrustTransformName);
 				if (HasDeployAnim)
 				{
 					if (enginePacked)
 					{
 						deployState.normalizedTime = 1;
+						bottom.nodeType = AttachNode.NodeType.Stack;
+						bottom.radius = 0.4f;
+						//deployState.enabled = false;
+						Events["TogglePlate"].guiName = Localizer.Format("#LOC_SPO_ExtendPlate"); //Extend Plate
 					}
 					else
 					{
@@ -209,8 +218,20 @@ namespace Orion
 					}
 				}
 			}
+			if (HighLogic.LoadedSceneIsEditor)
+			{
+				UI_FloatRange yieldrange = (UI_FloatRange)Fields["yield"].uiControlEditor; //maxe sure this is modifying the PAW in the VAB
+				yieldrange.maxValue = MaxYield;
+				yieldrange.minValue = MinYield;
+				yieldrange.stepIncrement = YieldIncrement;
+			}
 			if (HighLogic.LoadedSceneIsFlight)
 			{
+				UI_FloatRange yieldrange = (UI_FloatRange)Fields["yield"].uiControlFlight;
+				yieldrange.maxValue = MaxYield;
+				yieldrange.minValue = MinYield;
+				yieldrange.stepIncrement = YieldIncrement;
+				Debug.Log("[Orion]: Flightscene yield values:" + yieldrange.maxValue + " max; " + yieldrange.minValue + " min");
 				hasFired = false;
 				PropellantID = PartResourceLibrary.Instance.GetDefinition(Propellant).id;
 				NPUMass = GetPulseUnits().info.density;
@@ -272,7 +293,7 @@ namespace Orion
 			//isp calcs for pulse units is NPU propellant mass - a mix of Beryllium Oxide+Tungsten / NPU mass * plasma vel/G
 			// Tungsten plasma vel ~150 km/s, so for 50 kg of propellant and 215 kg total mass, per-NPU Isp is ~3556. if in atmo that becomes 50kg + (1/3 Pi*plateRadius2(6.25)*offset(12.5)*1.2kg/m3 for air*atmdensity
 			//atmo Isp goes up to ~10520s at sea level
-			Isp = (((Math.Ceiling((15295.74f * (((((NPUMass * CollimationFactor) * (yield * 0.2f)) + ((0.3334 * Math.PI * Math.Pow(0.5 * PlateDiameter, 2) * DetonationDist) * 0.0012f * atmoDensity))) / NPUMass)) * 100) / 100)));
+			Isp = (((Math.Ceiling((15295.74f * (((((NPUMass * CollimationFactor) * (yield * (1/MaxYield))) + ((0.3334 * Math.PI * Math.Pow(0.5 * PlateDiameter, 2) * DetonationDist) * 0.0012f * atmoDensity))) / NPUMass)) * 100) / 100)));
 			//NPU mass is constant, but reducing the yield reduces the % propellant flashed into plasma before the radiation case ruptures, determining overall mass delivered to the pusherplate
 			// tl;dr: lower yield bombs less efficient, have lower collimation factor
 			if (!Exhaustdamage)
@@ -296,16 +317,21 @@ namespace Orion
 			//Isp = ((NPUImpulse + (90 * NPUMass)) / (9.80665 * NPUMass));//account for impulse from firing the NPU for total Isp
 			double drymass = (vessel.totalMass - resourcemass);
 			double massfraction = (vessel.totalMass / drymass);
+			double pulsemassfraction = (vessel.totalMass / (vessel.totalMass-NPUMass));
 
 			if (!Medusa)
 			{
 				dV = ((((Isp * 9.80665) * Math.Log(massfraction))) //dV from pulse unit detonation
 					+ (90 * Math.Log(massfraction))); //Isp from NPU shot recoil; isp = ve/g: 90/G, dV is isp*G ln mass fraction, so 90 * ln massfraction
+				PulsedV = ((((Isp * 9.80665) * Math.Log(pulsemassfraction))) 
+					+ (90 * Math.Log(pulsemassfraction))); 
 			}
 			else
 			{
 				dV = ((((Isp * 9.80665) * Math.Log(massfraction))) //dV from pulse unit detonation
 				- (90 * Math.Log(massfraction))); //Isp from NPU shot recoil; isp = ve/g: 90/G, dV is isp*G ln mass fraction, so 90 * ln massfraction
+				PulsedV = ((((Isp * 9.80665) * Math.Log(pulsemassfraction))) 
+				- (90 * Math.Log(pulsemassfraction))); 
 			}
 			// if adding separate NPU magazine parts for more fuel, will need dV calcs for per-stage
 
@@ -329,6 +355,7 @@ namespace Orion
 			{
 				ImpulseDisplay = NPUImpulse.ToString("0.00 kN");
 			}
+			PulsedVdisplay = PulsedV.ToString("0.0 m/s");
 		}
 		/*void CheckClearance() this is throwing NRE spam. disabling until I can debug it
 		{
@@ -361,6 +388,7 @@ namespace Orion
 				}
 			}
 		}*/
+
 		void Update()
 		{
 			if (this.staged)
@@ -370,7 +398,7 @@ namespace Orion
 					if (EngineEnabled)
 					{
 						GetPulseUnits(); // returns NPUs in part, getConnectedResourceTotals is per vessel
-						if (GetPulseUnits().amount >= 1)
+						if (GetPulseUnits().amount >= 1 || CheatOptions.InfinitePropellant)
 						{
 							TransferAlert = 0;
 							if (guiStatusString == Localizer.Format("#LOC_SPO_noFuel"))
@@ -442,7 +470,7 @@ namespace Orion
 					//CheckClearance();				
 				}
 			}
-		}//for some reason, isn't properly updating NPU counters, when at 1 pulse unit left, declares out of puse units.
+		}
 
 		void FixedUpdate()
 		{
@@ -475,11 +503,22 @@ namespace Orion
 							{
 								if (ImpulseTime > 0)
 								{
-									double ImpulseCurve = (NPUImpulse / (ImpulseDuration / TimeWarp.fixedDeltaTime)); //determine impulse per frame
-									part.rb.AddForceAtPosition((-thrustTransform.forward) * ((float)ImpulseCurve / TimeWarp.fixedDeltaTime), transform.position, ForceMode.Force);
-									ImpulseTime -= TimeWarp.fixedDeltaTime;
+									if (TimeWarp.CurrentRate == 1)
+									{
+										double ImpulseCurve = (NPUImpulse / (ImpulseDuration / TimeWarp.fixedDeltaTime)); //determine impulse per frame
+										part.rb.AddForceAtPosition((-thrustTransform.forward) * ((float)ImpulseCurve / TimeWarp.fixedDeltaTime), transform.position, ForceMode.Force);
+										//see about applying force to entire vessel - ForEach part in vessel v, v.part.rb.AddForceAtposition...
+										//or see about autostrutting entire vessel automatically - look at editor extensions for code?
+										//part.autoStrutMode?
+										ImpulseTime -= TimeWarp.fixedDeltaTime;
+									}
+									else
+									{
+										part.rb.AddForceAtPosition(((-thrustTransform.forward) * (float)NPUImpulse), transform.position, ForceMode.Impulse);
+										ImpulseTime = -1;
+									}
 								}
-								if (ImpulseTime <= 0)
+								if (ImpulseTime < 0)
 								{
 									ImpulseTime = -1;
 								}
@@ -489,7 +528,6 @@ namespace Orion
 				}
 			}
 		}
-
 		#endregion KSP Events
 
 		#region NPU Deployment 
@@ -504,9 +542,13 @@ namespace Orion
 			{
 				part.rb.AddForceAtPosition((thrustTransform.forward) * (90 * (float)NPUMass), transform.position, ForceMode.Impulse); // recoil from firing pulse charge @ 90m/s
 			}
+			//implement NPU vel customization? Would enable using ModulePulseEngines for Mass Drivers, would only need to implement the projectile fired by the MD
 			AnimDelay = (AnimationDelay / TimeWarp.CurrentRate);
 			hasFired = true;
-			GetPulseUnits().amount--;
+			if (!CheatOptions.InfinitePropellant)
+			{
+				GetPulseUnits().amount--;
+			}
 			vessel.GetConnectedResourceTotals(PropellantID, out double NPURemaining, out double NPUMax);
 			NPULeft = NPURemaining;
 			resourcemass = (NPURemaining * NPUMass);
@@ -531,23 +573,22 @@ namespace Orion
 			//affect any nearby parts/vessels that aren't the source vessel
 			double blastImpulse = NPUImpulse; // distance-modified impulse from blastfront on nonvessel parts/debris/ships
 
-			NukeFX.CreateExplosion(thrustTransform.position, (float)BlastRadius, (float)yield, (float)atmoDensity, OrionFX, initalVelocity, -thrustTransform.forward);
-
-			if (atmoDensity > 0.05) // air to boost the explosion
+			if (atmoDensity > 0.10) // air to boost the explosion
 			{
+				NukeFX.CreateExplosion(thrustTransform.position, (float)yield, (float)atmoDensity, OrionAtmoFX, -thrustTransform.forward);
 				audioSource.PlayOneShot(AtmoSFX);
 				audioSource.volume = GameSettings.SHIP_VOLUME * 4f;
-				using (var blastHits = Physics.OverlapSphere(thrustTransform.position, (float)BlastRadius, 9076737).AsEnumerable().GetEnumerator())
+				if (Exhaustdamage)
 				{
-					while (blastHits.MoveNext())
+					using (var blastHits = Physics.OverlapSphere(thrustTransform.position, (float)BlastRadius, 9076737).AsEnumerable().GetEnumerator())
 					{
-						if (blastHits.Current == null) continue;
-						try
+						while (blastHits.MoveNext())
 						{
-							Part partHit = blastHits.Current.GetComponentInParent<Part>();
-							if (partHit != null && partHit.mass > 0)
+							if (blastHits.Current == null) continue;
+							try
 							{
-								if (Exhaustdamage)
+								Part partHit = blastHits.Current.GetComponentInParent<Part>();
+								if (partHit != null && partHit.mass > 0)
 								{
 									Rigidbody rb = partHit.Rigidbody;
 									Vector3 distToG0 = thrustTransform.position - partHit.transform.position;
@@ -556,7 +597,7 @@ namespace Orion
 									{
 										blastImpulse = ((((((((Math.Pow((Math.Pow((Math.Pow((9.54 * Math.Pow(10.0, -3.0) * (2200.0 / distToG0.magnitude)), 1.95)), 4.0) + Math.Pow((Math.Pow((3.01 * (1100.0 / distToG0.magnitude)), 1.25)), 4.0)), 0.25)) * 6.894)
 										* atmoDensity) * Math.Pow(yield, (1.0 / 3.0))))) * ExhaustDamageModifier)) * (partHit.radiativeArea / 3.0);
-										partHit.skinTemperature += ((((yield * 337000000) / (4 * Math.PI * Math.Pow(distToG0.magnitude, 2.0))) * (partHit.radiativeArea / 3.0)) * atmoDensity); // Fluence scales linearly w/ yield, 1 Kt will produce between 33 TJ and 337 kJ at 0-1000m,
+										partHit.skinTemperature += (((((yield * 337000000) / (4 * Math.PI * Math.Pow(distToG0.magnitude, 2.0))) * (partHit.radiativeArea / 2.0)) * ExhaustDamageModifier) / partHit.skinThermalMass); // Fluence scales linearly w/ yield, 1 Kt will produce between 33 TJ and 337 kJ at 0-1000m,
 									} // everything gets heated via atmosphere
 
 									Ray LoSRay = new Ray(thrustTransform.position, partHit.transform.position - thrustTransform.position);
@@ -575,12 +616,11 @@ namespace Orion
 											}
 										}
 									}
+
 								}
-							}
-							else
-							{
-								if (Exhaustdamage)
+								else
 								{
+
 									DestructibleBuilding building = blastHits.Current.GetComponentInParent<DestructibleBuilding>();
 
 									if (building != null)
@@ -593,31 +633,34 @@ namespace Orion
 									{
 										building.Demolish();
 									}
+
 								}
 							}
-						}
-						catch
-						{
-						}
+							catch
+							{
+							}
 
+						}
 					}
 				}
 			}
 			else //exoatmo detonation
 			{
+				NukeFX.CreateExplosion(thrustTransform.position, (float)yield, (float)atmoDensity, OrionVacFX, -thrustTransform.forward);
 				audioSource.PlayOneShot(VacSFX);
-				using (var blastHits = Physics.OverlapSphere(thrustTransform.position, (float)BlastRadius, 9076737).AsEnumerable().GetEnumerator())
+				if (Exhaustdamage)
 				{
-					while (blastHits.MoveNext())
+					using (var blastHits = Physics.OverlapSphere(thrustTransform.position, (float)BlastRadius, 9076737).AsEnumerable().GetEnumerator())
 					{
-						if (blastHits.Current == null) continue;
-						try
+						while (blastHits.MoveNext())
 						{
-							Part partHit = blastHits.Current.GetComponentInParent<Part>();
-							if (partHit != null && partHit.mass > 0)
+							if (blastHits.Current == null) continue;
+							try
 							{
-								if (Exhaustdamage)
+								Part partHit = blastHits.Current.GetComponentInParent<Part>();
+								if (partHit != null && partHit.mass > 0)
 								{
+
 									Rigidbody rb = partHit.Rigidbody;
 									Vector3 distToG0 = thrustTransform.position - partHit.transform.position;
 									if (partHit.vessel != this.vessel)
@@ -637,16 +680,14 @@ namespace Orion
 											if (p.vessel != this.vessel)
 											//if (p != this.part)
 											{
-												partHit.skinTemperature += ((((yield * 33700000) / (4 * Math.PI * Math.Pow(distToG0.magnitude, 2.0))) * (partHit.radiativeArea / 2.0)) * ExhaustDamageModifier); // Fluence scales linearly w/ yield, 1 Kt will produce between 33 TJ and 337 kJ at 0-1000m
+												partHit.skinTemperature += (((((yield * 33700000) / (4 * Math.PI * Math.Pow(distToG0.magnitude, 2.0))) * (partHit.radiativeArea / 2.0)) * ExhaustDamageModifier) / partHit.skinThermalMass); // Fluence scales linearly w/ yield, 1 Kt will produce between 33 TJ and 337 kJ at 0-1000m
 												p.rb.AddForceAtPosition((partHit.transform.position - thrustTransform.position).normalized * (float)blastImpulse, partHit.transform.position, ForceMode.Impulse);
 											}
 										}
 									}
+
 								}
-							}
-							else
-							{
-								if (Exhaustdamage)
+								else
 								{
 									DestructibleBuilding building = blastHits.Current.GetComponentInParent<DestructibleBuilding>();
 
@@ -660,11 +701,11 @@ namespace Orion
 									}
 								}
 							}
-						}
-						catch
-						{
-						}
+							catch
+							{
+							}
 
+						}
 					}
 				}
 			}
@@ -892,7 +933,6 @@ namespace Orion
 				activating = null;
 			}
 		}
-
 		///////////////////////////////
 		[KSPAction("#LOC_SPO_YieldUp")]
 		public void AGYieldUp(KSPActionParam param)
@@ -906,7 +946,7 @@ namespace Orion
 		}
 		public void IncreaseYield()
 		{
-			if (yield <= 4.5)
+			if (yield <= MaxYield-0.5f)
 			{
 				yield += 0.5f;
 				ScreenMessages.PostScreenMessage((Localizer.Format("#LOC_SPO_YieldSelect") + ": " + yield), 3.0f, ScreenMessageStyle.UPPER_CENTER);
@@ -979,8 +1019,8 @@ namespace Orion
 			StringBuilder output = new StringBuilder();
 			output.Append(Environment.NewLine);
 			output.AppendLine(Localizer.Format("#LOC_SPO_PUY") + $": {yield}");
-			output.AppendLine(Localizer.Format("#LOC_SPO_MinYield") + ": 0.5 kT");
-			output.AppendLine(Localizer.Format("#LOC_SPO_MaxYield") + ": 5.0 kT");
+			output.AppendLine(Localizer.Format("#LOC_SPO_MinYield") + ": " + MinYield + "kT");
+			output.AppendLine(Localizer.Format("#LOC_SPO_MaxYield") + ": " + MaxYield + "kT");
 			output.AppendLine(Localizer.Format("#LOC_SPO_BlastRadius") + $": {BlastRadius} m");
 			output.AppendLine(Localizer.Format("#LOC_SPO_VacImpulse") + $": {Isp} @ 1kT");
 

@@ -1,3 +1,18 @@
+v1.8.1
+===============================================
+-KSP 1.10 Update
+-Fixes inverted nodes on 1.875-3.75m adapter
+-Orion Drives now respect Infinite Propellant
+-Added Per-pulse dV display
+-Nukes no longer instantly vaporize asteroids/comets
+
+v1.8.0
+=============================================
+-New part: Medusa Drive
+-Adds Medusa Drive example craft
+-Fix flight GUI yield select for custom max yields > 5 kt
+-Reduced A.P.U mass - nuke magazines shouldn't be quite as absurdly heavy now.
+
 v1.7.5
 =============================================
 -Further revision to impulse code; 2-4x pyhsicswarp now properly uses impulse curves
