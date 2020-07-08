@@ -25,7 +25,7 @@ This pack provides the eponymous engine from Project Orion, as well as the parts
 
 INSTALLATION
 ===================================================================================================================
-Delete the previous version of Orion (if any) and place the GameData/Orion, Gamedata/CommunityResourcePack,  If Module Manager is not already intalled, place the ModuleManager.dll into GameData.
+Delete the previous version of Orion (if any) and place the /GameData/Orion, and /Gamedata/CommunityResourcePack into /GameData.  If Module Manager is not already intalled, place the ModuleManager.dll into /GameData.
 
 LICENSE
 ===================================================================================================================
@@ -35,3 +35,4 @@ ModuleManager - made by Sarbian & Ialdabaoth - http://forum.kerbalspaceprogram.c
 
 Community Resource Pack, more details at http://forum.kerbalspaceprogram.com/threads/91998
 >>>>>>> 086394da3f484e036770bcee7dbce5403dedb325
+=======
