@@ -4,7 +4,6 @@ OVERVIEW
 ===================================================================================================================
 This pack provides the eponymous engine from Project Orion, as well as the parts to build Project Orion vessel designs.
 
-
 INSTALLATION
 ===================================================================================================================
 Delete the previous version of Orion (if any) and place the GameData/Orion, Gamedata/CommunityResourcePack,  If Module Manager is not already intalled, place the ModuleManager.dll into GameData.

@@ -1,3 +1,32 @@
+==ToDo requests/wishlist
+==Finish Project Orion bits - 5m hab, VEM, space taxi, Orion-scaled RCS, IVAs
+
+==10m Drive, magazine deck, 10m fairing base
+
+==Minimag Orion - Minimag, Minimag propellant tanks, Radiator
+		Minimag was Coil+Capacitor banks, reactor; two parts or 1?
+
+==Kerbalism tie-in for radiation modelling
+==KSPIE WasteHeat support
+
+-Adds CTT integration
+
+==Add in external Pulse Unit anim group to hide pulse unit when out of fuel
+	-easy enough, have pulseunit mesh have defined name, have part.transform.'name' localscale = vector3.zero -see rocketpods rocketscales()
+==Add in resource generation on engine fire
+	-eC generation from minimag pulses?
+==Add in secondary fuel types
+	-ablator oil / eC consumption
+==Add in thrust/impulse override for thrust values to be specified in .cfg
+v1.8.2
+=============================
+KSP 1.11 update
+-Code changes to eliminate memory leak
+-Resource flow changed to stock model - no more messing with PAWs and fuel transfers
+-Modulename changed to prevent issues with FFT's 'ModulePulseEngine'
+-RestockWhitelist updated
+-Adds CTT integration
+
 v1.8.1
 ===============================================
 -KSP 1.10 Update
