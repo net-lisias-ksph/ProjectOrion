@@ -1,5 +1,8 @@
 # Project Orion :: Change Log
 
+* 2020-0410: 1.02 (SuicidalInsanity) for KSP 1.9.1
+	+ Changes to impulse code, should be less vessel-destroying. (Auto)Struts still recommended.
+	+ Min Pulse Unit yield now 0.05 kT
 * 2020-0402: 1.01 (SuicidalInsanity) for KSP 1.9.1
 	+ V1.1
 		- New part: 5m Orion Spine Adapter
