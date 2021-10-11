@@ -1,5 +1,11 @@
 # Project Orion :: Change Log
 
+* 2020-0708: 1.8.1 (SuicidalInsanity) for KSP 1.10.0
+	+ KSP 1.10 Update
+	+ Fixes inverted nodes on 1.875-3.75m adapter
+	+ Engines now respect Infinite Propellant
+	+ Added Per-pulse dV display
+	+ Nukes no longer instantly vaporize asteroids/comets
 * 2020-0618: 1.8.0 (SuicidalInsanity) for KSP 1.9.1
 	+ New part: Medusa Drive
 	+ Adds Medusa Drive example craft
