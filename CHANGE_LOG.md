@@ -1,5 +1,10 @@
 # Project Orion :: Change Log
 
+* 2020-0618: 1.8.0 (SuicidalInsanity) for KSP 1.9.1
+	+ New part: Medusa Drive
+	+ Adds Medusa Drive example craft
+	+ Fix flight GUI yield select for custom max yields > 5 kt
+	+ Reduced A.P.U mass - nuke magazines shouldn't be quite as absurdly heavy now.
 * 2020-0602: 1.7.5 (SuicidalInsanity) for KSP 1.9.1
 	+ Further revision to impulse code; 2-4x pyhsicswarp now properly uses impulse curves
 	+ ModulePulseEngines now supports Medusa-class Orions
