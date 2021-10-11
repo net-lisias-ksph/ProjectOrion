@@ -1,5 +1,15 @@
 # Project Orion :: Change Log
 
+* 2020-0602: 1.7.5 (SuicidalInsanity) for KSP 1.9.1
+	+ Further revision to impulse code; 2-4x pyhsicswarp now properly uses impulse curves
+	+ ModulePulseEngines now supports Medusa-class Orions
+	+ Fixes landing gear NRE
+	+ Reduced Nuke flash scale at sea level
+	+ Fixes orion firing when not active vessel and throttle > 0
+	+ Min and max yield is now configurable
+	+ Short Crewcan now has light emissives
+	+ Fixes crewhab IVA lounge table normals
+	+ Adds some example ships
 * 2020-0419: 1.7 (SuicidalInsanity) for KSP 1.9.1
 	+ New Parts:
 	+ 1.875m Orion Command Capsule
