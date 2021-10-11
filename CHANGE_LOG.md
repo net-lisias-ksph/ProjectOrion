@@ -1,5 +1,31 @@
 # Project Orion :: Change Log
 
+* 2020-0419: 1.7 (SuicidalInsanity) for KSP 1.9.1
+	+ New Parts:
+	+ 1.875m Orion Command Capsule
+	+ 1.875m RCS tank, 1,2m length
+	+ 1.875m radial fueltank, 1,2,4m length
+	+ 1.875m ISRU Smelter
+	+ 5m ISRU Uranium Processor
+	+ 2m radial resource contaners, 5 variants
+	+ 5m Cargo Bays, 2,4m length
+	+ radial cargo bay, 2,4m length, togglable endcaps
+	+ 1.875m Crew segment
+	+ 1.875m Lab
+	+ 3.75m Crew Quarters
+	+ 1.875m Endcap
+	+ 1.875-1.25m Adapters
+	+ 1.875-2.5m Adapter
+	+ 1.875-3.75m Adapters
+	+ 1.875-5m Adapter
+	+ Tweaks:
+		- Further code tweaking to Orion impulse, should provide smoother impulse.
+		- 2/4m spine Trusses now contain ISRU Workshops, now have internal storage/crew access/IVA
+		- Bomb magazine joint strength increased
+		- Spine Trusses now have radial nodes
+		- ISRU added: Pulse Units can be made via the Workshop with resources produced from the Smelter and Uranium Processor
+		- Stock and SMX ISRU compatibility patches for mining Orion ISRU resources
+	+ Adds CRP and Module Manager as dependencies.
 * 2020-0410: 1.02 (SuicidalInsanity) for KSP 1.9.1
 	+ Changes to impulse code, should be less vessel-destroying. (Auto)Struts still recommended.
 	+ Min Pulse Unit yield now 0.05 kT
