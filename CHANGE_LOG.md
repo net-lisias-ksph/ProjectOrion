@@ -1,5 +1,12 @@
 # Project Orion :: Change Log
 
+* 2020-0402: 1.01 (SuicidalInsanity) for KSP 1.9.1
+	+ V1.1
+		- New part: 5m Orion Spine Adapter
+		- New Part: 1.25m Orion Spine Adapter
+		- Adds Part Variants
+	+ Pulse unit magazines now have decouplers
+	+ Fixes Atmo Impulse error, Orion Drive should now generate correct levels of impulse in atmosphere
 * 2020-0402: 1.0 (SuicidalInsanity) for KSP 1.9.1
 	+ Initial release
 		- New Part: 5m Orion Drive
