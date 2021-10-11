@@ -1,5 +1,12 @@
 # Project Orion :: Change Log
 
+* 2020-1229: 1.8.2 (SuicidalInsanity) for KSP 1.11.0
+	+ KSP 1.11 update
+		- Code changes to eliminate memory leak
+		- Resource flow changed to stock model - no more messing with PAWs and fuel transfers
+		- Modulename changed to prevent issues with FFT's 'ModulePulseEngine'
+		- RestockWhitelist updated
+		- Adds CTT integration
 * 2020-0708: 1.8.1 (SuicidalInsanity) for KSP 1.10.0
 	+ KSP 1.10 Update
 	+ Fixes inverted nodes on 1.875-3.75m adapter
